@@ -28,12 +28,12 @@ check_cols = [
 # 1) Print out which of these are actually present
 present = [c for c in check_cols if c in df.columns]
 missing = [c for c in check_cols if c not in df.columns]
-print("Present columns:", present)
-print("Missing columns:", missing)
+#print("Present columns:", present)
+#print("Missing columns:", missing)
 
-for col in present:
-    print(f"\nValue counts for {col!r}:")
-    print(df[col].value_counts(dropna=False))
+#for col in present:
+#    print(f"\nValue counts for {col!r}:")
+#    print(df[col].value_counts(dropna=False))
 
 ##### RECODE OF VARIABLES #####
 # Recode foot column values
@@ -106,7 +106,7 @@ df['ingame_flag'] = df['Ingame-Shootout?'].map({
     'Ingame': 1,
     'Shootout': 0
 })
-print(df['ingame_flag'].value_counts(dropna=False))
+#print(df['ingame_flag'].value_counts(dropna=False))
 df = df.dropna(subset=['ingame_flag'])
 
 # === Recode “Home/Away/Neutral?” ===
@@ -116,6 +116,13 @@ df['loc_away'] = (df['Location (H-A-N)'] == 'A').astype(int)
 
 # Last penalty direction (keep numeric)
 df['last_dir'] = pd.to_numeric(df['last penalty direction'], errors='coerce')
+# Drop all observations without a prior direction (first-kicks)
+before = len(df)
+df = df.dropna(subset=['last_dir'])
+after = len(df)
+print(f"Dropped {before - after} rows without last_dir; {after} remain.")
+
+
 
 # Sanity check 
 #print(df[['Date', 'foot', 'foot_R', 'age']].head())
@@ -175,16 +182,25 @@ df_long['chosen'] = (df_long['Choice'] == df_long['alt']).astype(int)
 
 # Drop the 'Choice' column as it's no longer needed and keep only relevant columns for simple model. 
 keep = [
-  'foot_R','age','alt','Choice','chosen',
-  'fav_flag','greatGK_flag','ingame_flag'
+    'foot_R',        # shooter foot
+    'age',           # shooter age
+    'alt',           # alternative ID (1–6)
+    'Choice',        # actual choice (1–6)
+    # --- your new flags ---
+    'fav_flag',      # favored team?
+    'greatGK_flag',  # facing a “great” keeper?
+    'ingame_flag',   # in‐game penalty vs. shootout?
+    'loc_home',      # home venue?
+    'loc_away',      # away venue?
+    'last_dir'       # shooter’s last direction (1–6)
 ]
 
 df_model = df_long[keep].copy()
 
 # Verify no missing values remain
-#print("Missing in df_model:\n", df_model.isna().sum())
-#print("Shape of df_model:", df_model.shape)
-#print(df_model.head())
+print("Missing in df_model:\n", df_model.isna().sum())
+print("Shape of df_model:", df_model.shape)
+print(df_model.head())
 
 # Save out for Biogeme
-#df_model.to_csv('dataset/penalty_long_format.csv', index=False)
+df_model.to_csv('dataset/penalty_long_format.csv', index=False)

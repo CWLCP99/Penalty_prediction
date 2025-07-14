@@ -8,95 +8,73 @@ from biogeme.expressions import Variable
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# Load your trimmed model‐input CSV (must include 'foot_R','age','alt','Choice')
+# biogeme_model.py
+
+# 1) Load your long‐format model input
 df = pd.read_csv('dataset/penalty_long_format.csv')
 df = df.dropna(subset=['foot_R','age','alt','Choice'])
 database = db.Database('penalties', df)
 
-# Define parameters
-#    ASCs: one per zone; fix the two centre zones (ASC2 & ASC5) to zero via status=1
-ASC1 = ex.Beta('ASC1', 0, None, None, 0)  # Top-Left
-ASC2 = ex.Beta('ASC2', 0, None, None, 1)  # Top-Center (fixed to 0)
-ASC3 = ex.Beta('ASC3', 0, None, None, 0)  # Top-Right
-ASC4 = ex.Beta('ASC4', 0, None, None, 0)  # Bottom-Left
-ASC5 = ex.Beta('ASC5', 0, None, None, 1)  # Bottom-Center (fixed to 0)
-ASC6 = ex.Beta('ASC6', 0, None, None, 0)  # Bottom-Right
-
-B_foot = ex.Beta('B_foot', 0, None, None, 0)
-B_age  = ex.Beta('B_age',  0, None, None, 0)
-
-# Variables (Biogeme symbols)
+# 2) Variables (Biogeme symbols)
 foot_R    = Variable('foot_R')
 age       = Variable('age')
+alt       = Variable('alt')
 choiceVar = Variable('Choice')
 
-# Utilities: one ASC per alt + common covariates
+# 3) ASCs: one per zone; fix 2 & 5 to zero for identification
+ASC1 = ex.Beta('ASC1', 0, None, None, 0)
+ASC2 = ex.Beta('ASC2', 0, None, None, 1)   # fixed
+ASC3 = ex.Beta('ASC3', 0, None, None, 0)
+ASC4 = ex.Beta('ASC4', 0, None, None, 0)
+ASC5 = ex.Beta('ASC5', 0, None, None, 1)   # fixed
+ASC6 = ex.Beta('ASC6', 0, None, None, 0)
+
+# 4) Alternative‐specific foot coefficients
+B_foot1 = ex.Beta('B_foot1', 0, None, None, 0)
+B_foot2 = ex.Beta('B_foot2', 0, None, None, 0)
+B_foot3 = ex.Beta('B_foot3', 0, None, None, 0)
+B_foot4 = ex.Beta('B_foot4', 0, None, None, 0)
+B_foot5 = ex.Beta('B_foot5', 0, None, None, 0)
+B_foot6 = ex.Beta('B_foot6', 0, None, None, 0)
+
+# 5) Alternative‐specific age coefficients
+B_age1  = ex.Beta('B_age1',  0, None, None, 0)
+B_age2  = ex.Beta('B_age2',  0, None, None, 0)
+B_age3  = ex.Beta('B_age3',  0, None, None, 0)
+B_age4  = ex.Beta('B_age4',  0, None, None, 0)
+B_age5  = ex.Beta('B_age5',  0, None, None, 0)
+B_age6  = ex.Beta('B_age6',  0, None, None, 0)
+
+# 6) Utility functions: one line per alternative
 V = {
-    1: ASC1 + B_foot*foot_R + B_age*age,
-    2: ASC2 + B_foot*foot_R + B_age*age,
-    3: ASC3 + B_foot*foot_R + B_age*age,
-    4: ASC4 + B_foot*foot_R + B_age*age,
-    5: ASC5 + B_foot*foot_R + B_age*age,
-    6: ASC6 + B_foot*foot_R + B_age*age,
+    1: ASC1 + B_foot1*foot_R + B_age1*age,
+    2: ASC2 + B_foot2*foot_R + B_age2*age,
+    3: ASC3 + B_foot3*foot_R + B_age3*age,
+    4: ASC4 + B_foot4*foot_R + B_age4*age,
+    5: ASC5 + B_foot5*foot_R + B_age5*age,
+    6: ASC6 + B_foot6*foot_R + B_age6*age,
 }
 
-# Availability: all six alternatives available each choice occasion
+# 7) Availability: all six always available
 AV = {i: 1 for i in V.keys()}
 
-# Logit probability
-logprob = models.loglogit(V, AV, choiceVar)
+# 8) Define and estimate the logit model
+logprob  = models.loglogit(V, AV, choiceVar)
+biogeme  = bio.BIOGEME(database, logprob)
+biogeme.modelName = 'asc_foot_age_alt_specific'
+results  = biogeme.estimate()
 
-# Estimate
-biogeme = bio.BIOGEME(database, logprob)
-biogeme.modelName = 'asc_and_covariates'
-results = biogeme.estimate()
-
-# Print results (new API)
+# 9) Print out the full set of Betas (including fixed)
+print("=== Estimated parameters ===")
 print(results.get_estimated_parameters())
 
-###### to save results in different formats #############
-
-# 1) Build est_df from whichever API is available
-try:
-    # Newer DataFrame‐returning API, index = parameter names
-    est_df = results.getEstimatedParameters().copy()
-    est_df.index.name = 'Name'
-    est_df = est_df.reset_index()
-except Exception:
-    # Fallback to list‐of‐dicts API
-    est_list = results.get_estimated_parameters()
-    est_df = pd.DataFrame(est_list)
-
-# 2) Pull all Betas (including fixed) and append any missing
-all_betas = results.getBetaValues()
-for name, val in all_betas.items():
-    if name not in est_df['Name'].values:
-        est_df = est_df.append({
-            'Name': name,
-            'Value': val,
-            'Rob. Std err': 0.0,
-            'Rob. t-test': float('nan'),
-            'Rob. p-value': float('nan')
-        }, ignore_index=True)
-
-# 3) Mark status
-est_df['Status'] = est_df['Rob. Std err'].eq(0.0).map({True: 'Fixed', False: 'Estimated'})
-
-# 4) Save to Excel
-with pd.ExcelWriter('penalty_model_results.xlsx') as writer:
-    est_df.to_excel(writer, sheet_name='Model Results', index=False)
-
-# 5) Save to PNG
-fig, ax = plt.subplots(figsize=(10, len(est_df)*0.5 + 1))
-ax.axis('off')
-tbl = ax.table(
-    cellText=est_df.values,
-    colLabels=est_df.columns,
-    loc='center'
-)
-tbl.auto_set_font_size(False)
-tbl.set_fontsize(8)
-tbl.scale(1, 1.2)
-plt.savefig('penalty_model_results.png', bbox_inches='tight')
-
-print("Wrote penalty_model_results.xlsx and penalty_model_results.png")
+print("\n=== All Betas (including fixed ones) ===")
+# Use the new API
+all_betas = results.get_beta_values()
+for name in [
+    'ASC1','ASC2','ASC3','ASC4','ASC5','ASC6',
+    'B_age1','B_age2','B_age3','B_age4','B_age5','B_age6',
+    'B_foot1','B_foot2','B_foot3','B_foot4','B_foot5','B_foot6'
+]:
+    val = all_betas.get(name, 0.0)
+    print(f"{name}: {val:.6f}")
