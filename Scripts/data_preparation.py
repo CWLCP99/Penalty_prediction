@@ -137,6 +137,10 @@ df.dropna(subset=['foot_R', 'age'], inplace=True)
 
 #print(df.columns)  # Display the columns of the DataFrame
 
+# 1) Print a simple list
+print(df.columns.tolist())
+
+
 # Check if 'choice' column exists
 #if 'Choice' not in df.columns: 
 #    print('Choice column not found')
@@ -203,4 +207,4 @@ print("Shape of df_model:", df_model.shape)
 print(df_model.head())
 
 # Save out for Biogeme
-df_model.to_csv('dataset/penalty_long_format.csv', index=False)
+#df_model.to_csv('dataset/penalty_long_format.csv', index=False)
